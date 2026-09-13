@@ -113,7 +113,8 @@ The endpoint supports:
 - `stream_options.include_usage`;
 - llama.cpp-compatible terminal `timings`, plus opt-in `timings_per_token` and
   streaming `return_progress` observations;
-- non-strict function tools with `tool_choice` `auto`, `none`, or `allowed_tools` in `auto` mode,
+- function tools, including `strict:true` (accepted as advisory), with `tool_choice` `auto`,
+  `none`, or `allowed_tools` in `auto` mode,
   parallel calls enabled, assistant tool-call history, tool-result messages, and legacy
   function-call history;
 - the top-level `reasoning_effort` field;
@@ -123,7 +124,7 @@ The endpoint supports:
 
 Options whose observable behavior the Engine cannot provide are rejected when they request that
 behavior. This includes JSON constrained output, nonzero `logit_bias`, requested log probabilities,
-audio/file input or audio output, `strict:true`, required or named tool choice,
+audio/file input or audio output, required or named tool choice,
 `parallel_tool_calls:false` with enabled tools, explicit low/high image detail, web search,
 moderation, low/high verbosity, stored Chat Completions, and non-empty legacy `functions`.
 Each capability rejection identifies the affected field and the guarantee NInfer cannot provide.
@@ -134,6 +135,8 @@ as unknown hints.
 Semantically neutral fields do not make an otherwise executable request fail. All-zero
 `logit_bias`, `logprobs:false`, `top_logprobs:0`, `verbosity:"medium"`, empty legacy tool controls,
 text-only `audio` configuration, and `prediction` are accepted without changing Engine execution.
+`strict:true` on function tools is likewise accepted as advisory: the declared schema still
+reaches the prompt, but generated arguments are not constrained to it.
 Metadata, user/safety identifiers, service-tier and prompt-cache hints are likewise advisory.
 Unknown top-level fields are ignored.
 
@@ -516,10 +519,12 @@ undeclared model output remains ordinary text. `allowed_tools` with mode `auto` 
 without changing declaration order, while `tool_choice:"none"` disables structured tool output even
 when the history contains earlier calls.
 
-NInfer does not execute functions or enforce JSON Schema through constrained decoding, so
-`strict:true`, required or named tool choice, hosted tools, remote MCP tools, and custom free-form
-tools are rejected. Deferred loading, output schemas, and caller restrictions that exclude direct
-invocation are also rejected because their semantics cannot be honored.
+NInfer does not execute functions or enforce JSON Schema through constrained decoding.
+`strict:true` is therefore accepted as advisory: the declared schema reaches the prompt, but
+generated arguments are not constrained to it. Required or named tool choice, hosted tools,
+remote MCP tools, and custom free-form tools are rejected. Deferred loading, output schemas, and
+caller restrictions that exclude direct invocation are also rejected because their semantics
+cannot be honored.
 
 ### Response object and usage
 
@@ -688,9 +693,11 @@ encrypted hidden-reasoning restore semantics. `preserve_thinking` remains a NInf
 closed-turn Qwen reasoning history. `output_config.effort` is checked against the loaded template's
 declared effort capability.
 
-User-defined, non-strict tools support `name`, `description`, object `input_schema`, and
-`input_examples`. `tool_choice:auto` and `none` are executable. Forced or named choice,
-`strict:true`, active single-call enforcement, deferred tools, tools that exclude direct model
+User-defined tools support `name`, `description`, object `input_schema`, and
+`input_examples`; `strict:true` is accepted as advisory because NInfer does not constrain
+generated tool input to the declared schema. `tool_choice:auto` and `none` are executable.
+Forced or named choice, active single-call enforcement, deferred tools, tools that exclude
+direct model
 calls, Anthropic-provided/server tools, toolsets, MCP, and containers are rejected because their
 required constraint or executor is absent. `tool_result` preserves text/image order and marks
 `is_error:true` explicitly in the model prompt. For a visible Assistant tool-use turn, the next

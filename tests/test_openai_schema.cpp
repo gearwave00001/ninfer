@@ -290,8 +290,13 @@ int test_tools() {
 
     body          = base_request();
     body["tools"] = Json::array({function_tool("weather", true)});
-    failures += check(api_error([&] { (void)parse(body); }).code == "strict_tools_not_supported",
-                      "strict tools rejected");
+    const GenerationRequest strict_accepted = parse(body).generation;
+    failures += check(strict_accepted.tools.size() == 1 && strict_accepted.tools[0].name == "weather" &&
+                          prompt(strict_accepted).options.tool_jsons.size() == 1,
+                      "strict=true is accepted and rendered like a non-strict tool");
+    body["tools"][0]["function"]["strict"] = "yes";
+    failures += check(api_error([&] { (void)parse(body); }).param == "tools",
+                      "non-boolean strict is still malformed");
     body["tools"] = Json::array({Json{{"type", "custom"}, {"name", "shell"}}});
     failures += check(api_error([&] { (void)parse(body); }).code == "tool_type_not_supported",
                       "custom tools rejected");

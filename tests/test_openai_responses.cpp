@@ -717,10 +717,11 @@ int test_explicit_rejections() {
 
     Json value     = base;
     value["tools"] = Json::array({Json{{"type", "function"}, {"name", "f"}, {"strict", true}}});
-    failures += check(api_code([&] {
-                          (void)parse_openai_responses_create_request(value, limits());
-                      }) == "strict_tools_not_supported",
-                      "strict function schema is rejected explicitly");
+    const OpenAIResponsesCreateRequest strict_value =
+        parse_openai_responses_create_request(value, limits());
+    failures += check(!strict_value.prompt.generation.tools.empty() &&
+                          strict_value.prompt.generation.tools.front().name == "f",
+                      "strict function schema is accepted and lowered for the Engine");
 
     value         = base;
     value["text"] = Json{{"format", Json{{"type", "json_schema"}}}};

@@ -707,13 +707,10 @@ parse_function_tool(const Json& item, std::optional<std::string> wire_namespace,
         parameters = item.at("parameters");
     }
     if (item.contains("strict") && !item.at("strict").is_null()) {
+        // Accepted as advisory: the declared schema reaches the prompt, but generated
+        // arguments are not schema-constrained by the Engine.
         if (!item.at("strict").is_boolean()) {
             bad_request("function strict must be a boolean", "tools");
-        }
-        if (item.at("strict").get<bool>()) {
-            bad_request("strict function schema enforcement requires constrained decoding, "
-                        "which the Engine does not provide",
-                        "tools", "strict_tools_not_supported");
         }
     }
     if (item.contains("defer_loading") && !item.at("defer_loading").is_null()) {

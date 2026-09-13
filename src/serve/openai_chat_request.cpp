@@ -623,14 +623,10 @@ void parse_tools(const Json& body, GenerationRequest& output) {
             tool.input_schema_json = function.at("parameters").dump();
         }
         if (function.contains("strict") && !function.at("strict").is_null()) {
+            // Accepted as advisory: the declared schema reaches the prompt, but generated
+            // arguments are not schema-constrained by the Engine.
             if (!function.at("strict").is_boolean()) {
                 bad_request("function strict must be a boolean", "tools");
-            }
-            if (function.at("strict").get<bool>()) {
-                bad_request(
-                    "strict=true requires generated function arguments to satisfy the declared "
-                    "JSON Schema, which NInfer cannot guarantee",
-                    "tools", "strict_tools_not_supported");
             }
         }
         output.tools.push_back(std::move(tool));
