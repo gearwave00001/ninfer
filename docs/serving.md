@@ -113,8 +113,8 @@ The endpoint supports:
 - `stream_options.include_usage`;
 - llama.cpp-compatible terminal `timings`, plus opt-in `timings_per_token` and
   streaming `return_progress` observations;
-- function tools, including `strict:true` (accepted as advisory), with `tool_choice` `auto`,
-  `none`, or `allowed_tools` in `auto` mode,
+- function tools, including `strict:true` (accepted as advisory unless `--strict` is set),
+  with `tool_choice` `auto`, `none`, or `allowed_tools` in `auto` mode,
   parallel calls enabled, assistant tool-call history, tool-result messages, and legacy
   function-call history;
 - the top-level `reasoning_effort` field;
@@ -136,7 +136,8 @@ Semantically neutral fields do not make an otherwise executable request fail. Al
 `logit_bias`, `logprobs:false`, `top_logprobs:0`, `verbosity:"medium"`, empty legacy tool controls,
 text-only `audio` configuration, and `prediction` are accepted without changing Engine execution.
 `strict:true` on function tools is likewise accepted as advisory: the declared schema still
-reaches the prompt, but generated arguments are not constrained to it.
+reaches the prompt, but generated arguments are not constrained to it. `--strict` restores the
+explicit rejection instead.
 Metadata, user/safety identifiers, service-tier and prompt-cache hints are likewise advisory.
 Unknown top-level fields are ignored.
 
@@ -520,11 +521,11 @@ without changing declaration order, while `tool_choice:"none"` disables structur
 when the history contains earlier calls.
 
 NInfer does not execute functions or enforce JSON Schema through constrained decoding.
-`strict:true` is therefore accepted as advisory: the declared schema reaches the prompt, but
-generated arguments are not constrained to it. Required or named tool choice, hosted tools,
-remote MCP tools, and custom free-form tools are rejected. Deferred loading, output schemas, and
-caller restrictions that exclude direct invocation are also rejected because their semantics
-cannot be honored.
+`strict:true` is therefore accepted as advisory by default: the declared schema reaches the
+prompt, but generated arguments are not constrained to it; `--strict` rejects it explicitly.
+Required or named tool choice, hosted tools, remote MCP tools, and custom free-form tools are
+rejected. Deferred loading, output schemas, and caller restrictions that exclude direct
+invocation are also rejected because their semantics cannot be honored.
 
 ### Response object and usage
 
@@ -694,8 +695,9 @@ closed-turn Qwen reasoning history. `output_config.effort` is checked against th
 declared effort capability.
 
 User-defined tools support `name`, `description`, object `input_schema`, and
-`input_examples`; `strict:true` is accepted as advisory because NInfer does not constrain
-generated tool input to the declared schema. `tool_choice:auto` and `none` are executable.
+`input_examples`; `strict:true` is accepted as advisory by default because NInfer does not
+constrain generated tool input to the declared schema (`--strict` rejects it).
+`tool_choice:auto` and `none` are executable.
 Forced or named choice, active single-call enforcement, deferred tools, tools that exclude
 direct model
 calls, Anthropic-provided/server tools, toolsets, MCP, and containers are rejected because their
@@ -809,6 +811,7 @@ The table lists executable defaults. The startup example selects a long-context 
 | `--frequency-penalty F` | process-level frequency-penalty override | unset |
 | `--seed N` | fixed seed when a request omits one | fresh random seed per request |
 | `--greedy` | force exact argmax for all requests | off |
+| `--strict` | reject `strict:true` tool schemas; by default they are accepted as advisory | off |
 
 Context-cost coefficients resolve once at startup from generic defaults, matching compiled values,
 and optional transfer or artifact-prefill entries from `--context-cost-presets FILE`. A malformed

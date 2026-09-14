@@ -66,6 +66,8 @@ int main() {
         "server defaults unexpectedly override registered model sampling");
     failures += check(resolve_public_model_id(defaults, "artifact-model") == "artifact-model",
                       "artifact model id was not selected by default");
+    failures += check(!defaults.strict_tool_schema,
+                      "strict tool schemas are unexpectedly rejected by default");
 
     const ServeOptions fp8 = parse({"ninfer-serve", "model.ninfer", "--kv-dtype", "fp8"});
     failures += check(fp8.kv_cache == ninfer::KvCacheStorage::Fp8E4M3Row256,
@@ -102,6 +104,10 @@ int main() {
         (void)parse({"ninfer-serve", "model.ninfer", "--default-thinking-budget", "0"});
     } catch (const std::invalid_argument&) { zero_thinking_budget_rejected = true; }
     failures += check(zero_thinking_budget_rejected, "zero --default-thinking-budget was accepted");
+
+    const ServeOptions strict_tools = parse({"ninfer-serve", "model.ninfer", "--strict"});
+    failures += check(strict_tools.strict_tool_schema,
+                      "--strict did not enable strict tool schema rejection");
 
     bool empty_model_id_rejected = false;
     try {
@@ -296,6 +302,8 @@ int main() {
     failures +=
         check(serve_usage_text("ninfer-serve").find("--no-prefix-reuse") != std::string::npos,
               "serve help omits --no-prefix-reuse");
+    failures += check(serve_usage_text("ninfer-serve").find("--strict") != std::string::npos,
+                      "serve help omits --strict");
     failures += check(serve_usage_text("ninfer-serve").find("--host-kv-mib") != std::string::npos,
                       "serve help omits context-cache capacities");
     failures += check(serve_usage_text("ninfer-serve").find("device-state=max-concurrency") !=

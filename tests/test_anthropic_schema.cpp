@@ -38,8 +38,18 @@ RequestLimits limits() {
     return value;
 }
 
+RequestLimits strict_limits() {
+    RequestLimits value = limits();
+    value.strict_tool_schema = true;
+    return value;
+}
+
 AnthropicMessagesRequest parse(const Json& body) {
     return parse_anthropic_messages_request(body, limits());
+}
+
+AnthropicMessagesRequest parse_strict(const Json& body) {
+    return parse_anthropic_messages_request(body, strict_limits());
 }
 
 std::string api_code(const std::function<void()>& action) {
@@ -211,7 +221,7 @@ int test_attribution_system_block() {
     const ninfer::PromptInput first       = prompt(first_request);
     const ninfer::PromptInput second      = prompt(parse(attributed(".8f7")).generation);
     const ninfer::PromptInput counted =
-        prompt(parse_anthropic_count_tokens_request(first_body).generation);
+        prompt(parse_anthropic_count_tokens_request(first_body, limits()).generation);
 
     const auto has_real_system = [](const ninfer::PromptInput& input) {
         return input.messages.size() == 2 &&
@@ -366,8 +376,9 @@ int test_tool_history() {
          Json{{"role", "user"}, {"content", Json::array({tool_result("toolu_same", "result")})}}});
     failures += check(api_code([&] { (void)parse(body); }) == "invalid_tool_history",
                       "duplicate tool_use ID was accepted");
-    failures += check(api_code([&] { (void)parse_anthropic_count_tokens_request(body); }) ==
-                          "invalid_tool_history",
+    failures += check(
+        api_code([&] { (void)parse_anthropic_count_tokens_request(body, limits()); }) ==
+            "invalid_tool_history",
                       "Count Tokens did not share Messages tool-history validation");
     return failures;
 }
@@ -398,6 +409,8 @@ int test_tools() {
                           prompt(strict_request).options.tool_jsons.at(0).find("weather") !=
                               std::string::npos,
                       "strict=true is accepted and reaches the Qwen prompt");
+    failures += check(api_code([&] { (void)parse_strict(body); }) == "strict_tools_not_supported",
+                      "strict policy rejects strict=true tools");
     body["tool_choice"]               = Json{{"type", "none"}, {"disable_parallel_tool_use", true}};
     body["tools"][0]["defer_loading"] = true;
     body["tools"][0]["allowed_callers"] = Json::array({"code_execution"});
@@ -494,7 +507,7 @@ int test_thinking_and_count_tokens() {
     body["max_tokens"]                        = 0;
     body["temperature"]                       = "ignored for counting";
     body["output_config"]                     = Json{{"format", Json{{"type", "json_schema"}}}};
-    const AnthropicCountTokensRequest counted = parse_anthropic_count_tokens_request(body);
+    const AnthropicCountTokensRequest counted = parse_anthropic_count_tokens_request(body, limits());
     failures += check(counted.generation.enable_thinking == true,
                       "Count Tokens did not share prompt-affecting Thinking parsing");
 
@@ -551,7 +564,7 @@ int test_thinking_history_transport_metadata() {
                       "visible Thinking text did not own prompt semantics");
 
     const AnthropicCountTokensRequest counted =
-        parse_anthropic_count_tokens_request(missing_signature);
+        parse_anthropic_count_tokens_request(missing_signature, limits());
     failures += check(counted.generation.messages[1].reasoning_content == "thought",
                       "Count Tokens assigned semantics to Thinking signature metadata");
     return failures;

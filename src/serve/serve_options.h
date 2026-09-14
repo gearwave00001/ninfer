@@ -58,6 +58,7 @@ struct ServeOptions {
     // fields. An omitted seed is replaced per request with a fresh random seed.
     SamplingOverrides sampling_overrides;
     bool greedy                 = false; // --greedy: force temperature 0 (exact argmax)
+    bool strict_tool_schema     = false; // --strict: reject strict:true tool schemas
     product::LogLevel log_level = product::LogLevel::Info;
 
     // Exact process argv for the server-start record. Secret-bearing option values are redacted

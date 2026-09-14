@@ -32,6 +32,12 @@ RequestLimits limits() {
     return value;
 }
 
+RequestLimits strict_limits() {
+    RequestLimits value = limits();
+    value.strict_tool_schema = true;
+    return value;
+}
+
 std::string api_code(const std::function<void()>& action) {
     try {
         action();
@@ -722,6 +728,10 @@ int test_explicit_rejections() {
     failures += check(!strict_value.prompt.generation.tools.empty() &&
                           strict_value.prompt.generation.tools.front().name == "f",
                       "strict function schema is accepted and lowered for the Engine");
+    failures += check(api_code([&] {
+                          (void)parse_openai_responses_create_request(value, strict_limits());
+                      }) == "strict_tools_not_supported",
+                      "strict policy rejects strict=true function schemas");
 
     value         = base;
     value["text"] = Json{{"format", Json{{"type", "json_schema"}}}};

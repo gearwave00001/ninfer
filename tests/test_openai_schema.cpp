@@ -42,12 +42,23 @@ bool throws_logic(Function&& function) {
 
 RequestLimits limits() { return RequestLimits{.default_max_tokens = 512}; }
 
+RequestLimits strict_limits() {
+    RequestLimits value;
+    value.default_max_tokens = 512;
+    value.strict_tool_schema = true;
+    return value;
+}
+
 Json base_request() {
     return Json{{"model", "qwen"},
                 {"messages", Json::array({Json{{"role", "user"}, {"content", "hello"}}})}};
 }
 
 OpenAIChatRequest parse(Json body) { return parse_chat_completion_request(body, limits()); }
+
+OpenAIChatRequest parse_strict(Json body) {
+    return parse_chat_completion_request(body, strict_limits());
+}
 
 ResolvedPromptSemantics semantics(const GenerationRequest& request) {
     ServeOptions server;
@@ -294,6 +305,9 @@ int test_tools() {
     failures += check(strict_accepted.tools.size() == 1 && strict_accepted.tools[0].name == "weather" &&
                           prompt(strict_accepted).options.tool_jsons.size() == 1,
                       "strict=true is accepted and rendered like a non-strict tool");
+    failures += check(api_error([&] { (void)parse_strict(body); }).code ==
+                          "strict_tools_not_supported",
+                      "strict policy rejects strict=true tools");
     body["tools"][0]["function"]["strict"] = "yes";
     failures += check(api_error([&] { (void)parse(body); }).param == "tools",
                       "non-boolean strict is still malformed");

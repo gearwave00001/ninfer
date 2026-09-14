@@ -689,6 +689,7 @@ struct ParsedTool {
     ToolDefinition definition;
     ToolSource source = ToolSource::UserDefined;
     std::string source_type;
+    bool strict        = false;
     bool defer_loading = false;
     std::optional<std::vector<std::string>> allowed_callers;
 };
@@ -744,11 +745,10 @@ std::vector<ParsedTool> parse_tool_definitions(const Json& body) {
         }
 
         if (item.contains("strict") && !item.at("strict").is_null()) {
-            // Accepted as advisory: the declared schema reaches the prompt, but generated
-            // tool input is not schema-constrained by the Engine.
             if (!item.at("strict").is_boolean()) {
                 bad_request("tool strict must be a boolean", "tools");
             }
+            parsed.strict = item.at("strict").get<bool>();
         }
         if (item.contains("defer_loading") && !item.at("defer_loading").is_null()) {
             if (!item.at("defer_loading").is_boolean()) {
@@ -777,7 +777,7 @@ std::vector<ParsedTool> parse_tool_definitions(const Json& body) {
     return result;
 }
 
-void lower_tools(const Json& body, GenerationRequest& request) {
+void lower_tools(const Json& body, const RequestLimits& limits, GenerationRequest& request) {
     const ToolSelection selection       = parse_tool_choice(body);
     std::vector<ParsedTool> definitions = parse_tool_definitions(body);
     const auto named                    = [&](const ParsedTool& tool) {
@@ -820,6 +820,11 @@ void lower_tools(const Json& body, GenerationRequest& request) {
                             "' requires its predefined prompt schema or server executor, which "
                             "NInfer does not provide",
                         "tools", "anthropic_tools_not_supported");
+        }
+        if (limits.strict_tool_schema && tool.strict) {
+            bad_request("strict=true requires generated tool input to satisfy the declared JSON "
+                        "Schema, which NInfer cannot guarantee",
+                        "tools", "strict_tools_not_supported");
         }
         if (tool.defer_loading) {
             bad_request("defer_loading=true requires a deferred tool loader that NInfer does not "
@@ -1010,9 +1015,9 @@ void apply_anthropic_prompt_cache_policy(const Json& body, GenerationRequest& re
                       .ttl      = *automatic_ttl};
 }
 
-void parse_common_prompt(const Json& body, GenerationRequest& request, ParsePurpose purpose,
-                         int effective_max_tokens) {
-    lower_tools(body, request);
+void parse_common_prompt(const Json& body, const RequestLimits& limits, GenerationRequest& request,
+                         ParsePurpose purpose, int effective_max_tokens) {
+    lower_tools(body, limits, request);
     parse_system(body, request);
     parse_messages(body, request);
     parse_thinking(body, request, purpose, effective_max_tokens);
@@ -1055,18 +1060,19 @@ AnthropicMessagesRequest parse_anthropic_messages_request(const Json& body,
         result.generation.max_tokens = limits.default_max_tokens;
     }
 
-    parse_common_prompt(body, result.generation, ParsePurpose::Messages,
+    parse_common_prompt(body, limits, result.generation, ParsePurpose::Messages,
                         result.generation.max_tokens);
     parse_generation_fields(body, result.generation);
     return result;
 }
 
-AnthropicCountTokensRequest parse_anthropic_count_tokens_request(const Json& body) {
+AnthropicCountTokensRequest parse_anthropic_count_tokens_request(const Json& body,
+                                                                 const RequestLimits& limits) {
     require_object(body);
     AnthropicCountTokensRequest result;
     result.model                           = parse_model(body);
     result.generation.tool_name_max_length = kMaxToolNameLength;
-    parse_common_prompt(body, result.generation, ParsePurpose::CountTokens,
+    parse_common_prompt(body, limits, result.generation, ParsePurpose::CountTokens,
                         std::numeric_limits<int>::max());
     return result;
 }

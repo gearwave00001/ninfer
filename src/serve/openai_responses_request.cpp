@@ -671,7 +671,8 @@ struct ParsedFunctionTool {
 ParsedFunctionTool
 parse_function_tool(const Json& item, std::optional<std::string> wire_namespace,
                     std::string_view namespace_description,
-                    std::unordered_map<std::string, OpenAIResponsesFunctionIdentity>& identities) {
+                    std::unordered_map<std::string, OpenAIResponsesFunctionIdentity>& identities,
+                    bool strict_tool_schema) {
     static const std::unordered_set<std::string> allowed_members = {
         "type",          "name",         "description", "parameters", "strict", "allowed_callers",
         "defer_loading", "output_schema"};
@@ -707,10 +708,13 @@ parse_function_tool(const Json& item, std::optional<std::string> wire_namespace,
         parameters = item.at("parameters");
     }
     if (item.contains("strict") && !item.at("strict").is_null()) {
-        // Accepted as advisory: the declared schema reaches the prompt, but generated
-        // arguments are not schema-constrained by the Engine.
         if (!item.at("strict").is_boolean()) {
             bad_request("function strict must be a boolean", "tools");
+        }
+        if (strict_tool_schema && item.at("strict").get<bool>()) {
+            bad_request("strict function schema enforcement requires constrained decoding, "
+                        "which the Engine does not provide",
+                        "tools", "strict_tools_not_supported");
         }
     }
     if (item.contains("defer_loading") && !item.at("defer_loading").is_null()) {
@@ -761,7 +765,7 @@ parse_function_tool(const Json& item, std::optional<std::string> wire_namespace,
     return parsed;
 }
 
-void parse_tools(const Json& body, ParsedPromptFields& out) {
+void parse_tools(const Json& body, ParsedPromptFields& out, bool strict_tool_schema) {
     if (!body.contains("tools") || body.at("tools").is_null()) { return; }
     if (!body.at("tools").is_array()) { bad_request("tools must be an array", "tools"); }
 
@@ -784,8 +788,8 @@ void parse_tools(const Json& body, ParsedPromptFields& out) {
         }
         const std::string type = item.at("type").get<std::string>();
         if (type == "function") {
-            out.wire_tools.push_back(
-                append_function(parse_function_tool(item, std::nullopt, {}, out.tool_identities)));
+            out.wire_tools.push_back(append_function(parse_function_tool(
+                item, std::nullopt, {}, out.tool_identities, strict_tool_schema)));
             continue;
         }
         if (type != "namespace") {
@@ -826,7 +830,8 @@ void parse_tools(const Json& body, ParsedPromptFields& out) {
                             "tools", "tool_type_not_supported");
             }
             canonical["tools"].push_back(append_function(parse_function_tool(
-                nested, namespace_name, namespace_description, out.tool_identities)));
+                nested, namespace_name, namespace_description, out.tool_identities,
+                strict_tool_schema)));
         }
         out.wire_tools.push_back(std::move(canonical));
     }
@@ -1037,7 +1042,7 @@ ParsedPromptFields parse_prompt_fields(const Json& body, const RequestLimits& li
         out.prompt.previous_response_id = body.at("previous_response_id").get<std::string>();
     }
 
-    parse_tools(body, out);
+    parse_tools(body, out, limits.strict_tool_schema);
     parse_tool_choice(body, out);
     out.parallel_tool_calls = optional_bool(body, "parallel_tool_calls", true);
     if (!out.parallel_tool_calls && out.prompt.generation.uses_tools()) {

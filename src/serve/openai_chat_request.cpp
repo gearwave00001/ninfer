@@ -586,7 +586,7 @@ void parse_messages(const Json& body, GenerationRequest& output) {
     }
 }
 
-void parse_tools(const Json& body, GenerationRequest& output) {
+void parse_tools(const Json& body, const RequestLimits& limits, GenerationRequest& output) {
     if (!body.contains("tools") || body.at("tools").is_null()) { return; }
     const Json& tools = body.at("tools");
     if (!tools.is_array()) { bad_request("tools must be an array", "tools"); }
@@ -623,10 +623,14 @@ void parse_tools(const Json& body, GenerationRequest& output) {
             tool.input_schema_json = function.at("parameters").dump();
         }
         if (function.contains("strict") && !function.at("strict").is_null()) {
-            // Accepted as advisory: the declared schema reaches the prompt, but generated
-            // arguments are not schema-constrained by the Engine.
             if (!function.at("strict").is_boolean()) {
                 bad_request("function strict must be a boolean", "tools");
+            }
+            if (limits.strict_tool_schema && function.at("strict").get<bool>()) {
+                bad_request(
+                    "strict=true requires generated function arguments to satisfy the declared "
+                    "JSON Schema, which NInfer cannot guarantee",
+                    "tools", "strict_tools_not_supported");
             }
         }
         output.tools.push_back(std::move(tool));
@@ -895,7 +899,7 @@ OpenAIChatRequest parse_chat_completion_request(const Json& body, const RequestL
 
     const OpenAIPromptCachePolicy cache_policy = parse_openai_prompt_cache_policy(body);
 
-    parse_tools(body, output.generation);
+    parse_tools(body, limits, output.generation);
     parse_tool_choice(body, output.generation);
     parse_parallel_tool_calls(body, output.generation);
     parse_messages(body, output.generation);

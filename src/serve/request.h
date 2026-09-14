@@ -45,6 +45,10 @@ private:
 // Server-side context needed while parsing/validating a request.
 struct RequestLimits {
     int default_max_tokens = 8192;
+    // When true, strict:true tool schemas are rejected because the Engine provides no
+    // constrained decoding to guarantee the declared schema. Off by default so advisory
+    // strict tools are accepted.
+    bool strict_tool_schema = false;
 };
 
 enum class ContentKind {
