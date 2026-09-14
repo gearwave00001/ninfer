@@ -17,8 +17,11 @@ namespace ninfer::serve {
 void HttpServer::handle_count_tokens(const httplib::Request& req, httplib::Response& res) {
     const std::string request_id = res.get_header_value("request-id");
     try {
+        RequestLimits limits;
+        limits.default_max_tokens = options_.default_max_tokens;
+        limits.strict_tool_schema = options_.strict_tool_schema;
         const AnthropicCountTokensRequest request =
-            parse_anthropic_count_tokens_request(parse_json_body(req));
+            parse_anthropic_count_tokens_request(parse_json_body(req), limits);
         const int input_tokens = service_->count_prompt_tokens(
             request.generation, [&req] { return client_disconnected(req); });
         res.set_content(make_anthropic_count_tokens_response(input_tokens), "application/json");
@@ -42,6 +45,7 @@ void HttpServer::handle_messages(const httplib::Request& req, httplib::Response&
     try {
         RequestLimits limits;
         limits.default_max_tokens = options_.default_max_tokens;
+        limits.strict_tool_schema = options_.strict_tool_schema;
         request                   = parse_anthropic_messages_request(parse_json_body(req), limits);
     } catch (const ApiException& exception) {
         write_anthropic_error(res, exception.error(), request_id);
